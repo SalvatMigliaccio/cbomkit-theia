@@ -21,11 +21,12 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"strings"
 	"time"
 
 	bomdag "github.com/IBM/cbomkit-theia/scanner/bom-dag"
-	pemutility "github.com/IBM/cbomkit-theia/scanner/pem-utility"
 
+	pemutility "github.com/IBM/cbomkit-theia/scanner/pem-utility"
 	"github.com/google/uuid"
 
 	cdx "github.com/CycloneDX/cyclonedx-go"
@@ -40,6 +41,14 @@ type x509CertificateWithMetadata struct {
 
 // During parsing of the x509.Certificate a unknown algorithm was found
 var errX509UnknownAlgorithm = errors.New("X.509 certificate has unknown algorithm")
+
+func isOQSAlgorithm(cert *x509CertificateWithMetadata) bool {
+	return strings.Contains(cert.SignatureAlgorithm.String(), "OQS")
+}
+
+func getOQSAlgorithmName(cert *x509CertificateWithMetadata) string {
+	return strings.TrimPrefix(cert.SignatureAlgorithm.String(), "OQS-")
+}
 
 // Create a new x509CertificateWithMetadata from a x509.Certificate and a path
 func newX509CertificateWithMetadata(cert *x509.Certificate, path string) (*x509CertificateWithMetadata, error) {
@@ -308,6 +317,7 @@ func (x509CertificateWithMetadata *x509CertificateWithMetadata) getSignatureAlgo
 
 		pke := getGenericPKEAlgorithmComponent(x509CertificateWithMetadata.path)
 		pke.Name = "DSA"
+
 		return signatureAlgorithmResult{
 			signature: &comp,
 			hash:      &hash,
@@ -324,6 +334,7 @@ func (x509CertificateWithMetadata *x509CertificateWithMetadata) getSignatureAlgo
 
 		pke := getGenericPKEAlgorithmComponent(x509CertificateWithMetadata.path)
 		pke.Name = "ECDSA"
+
 		return signatureAlgorithmResult{
 			signature: &comp,
 			hash:      &hash,
@@ -340,6 +351,7 @@ func (x509CertificateWithMetadata *x509CertificateWithMetadata) getSignatureAlgo
 
 		pke := getGenericPKEAlgorithmComponent(x509CertificateWithMetadata.path)
 		pke.Name = "ECDSA"
+
 		return signatureAlgorithmResult{
 			signature: &comp,
 			hash:      &hash,
@@ -356,6 +368,7 @@ func (x509CertificateWithMetadata *x509CertificateWithMetadata) getSignatureAlgo
 
 		pke := getGenericPKEAlgorithmComponent(x509CertificateWithMetadata.path)
 		pke.Name = "ECDSA"
+
 		return signatureAlgorithmResult{
 			signature: &comp,
 			hash:      &hash,
@@ -372,6 +385,7 @@ func (x509CertificateWithMetadata *x509CertificateWithMetadata) getSignatureAlgo
 
 		pke := getGenericPKEAlgorithmComponent(x509CertificateWithMetadata.path)
 		pke.Name = "ECDSA"
+
 		return signatureAlgorithmResult{
 			signature: &comp,
 			hash:      &hash,
@@ -389,6 +403,7 @@ func (x509CertificateWithMetadata *x509CertificateWithMetadata) getSignatureAlgo
 
 		pke := getGenericPKEAlgorithmComponent(x509CertificateWithMetadata.path)
 		pke.Name = "RSAPSS"
+
 		return signatureAlgorithmResult{
 			signature: &comp,
 			hash:      &hash,
@@ -406,6 +421,7 @@ func (x509CertificateWithMetadata *x509CertificateWithMetadata) getSignatureAlgo
 
 		pke := getGenericPKEAlgorithmComponent(x509CertificateWithMetadata.path)
 		pke.Name = "RSAPSS"
+
 		return signatureAlgorithmResult{
 			signature: &comp,
 			hash:      &hash,
@@ -423,6 +439,7 @@ func (x509CertificateWithMetadata *x509CertificateWithMetadata) getSignatureAlgo
 
 		pke := getGenericPKEAlgorithmComponent(x509CertificateWithMetadata.path)
 		pke.Name = "RSAPSS"
+
 		return signatureAlgorithmResult{
 			signature: &comp,
 			hash:      &hash,
@@ -434,10 +451,25 @@ func (x509CertificateWithMetadata *x509CertificateWithMetadata) getSignatureAlgo
 		comp.CryptoProperties.OID = "1.3.101.112"
 		return signatureAlgorithmResult{
 			signature: &comp,
-			hash:      nil, // No Hash, see: https://datatracker.ietf.org/doc/html/rfc8032#section-4
+			hash:      nil, // Nessun hash, vedi: https://datatracker.ietf.org/doc/html/rfc8032#section-4
 			pke:       nil,
 		}, nil
 	default:
+		// Caso in cui l'algoritmo è sconosciuto
+		if x509CertificateWithMetadata.SignatureAlgorithm == x509.UnknownSignatureAlgorithm {
+			if isOQSAlgorithm(x509CertificateWithMetadata) {
+				comp := getGenericSignatureAlgorithmComponent(x509CertificateWithMetadata.SignatureAlgorithm, x509CertificateWithMetadata.path)
+				// Imposta un OID custom per identificare l'algoritmo OQS
+				comp.CryptoProperties.OID = "OQS-Custom-OID"
+				// Imposta il nome come "OQS - <nome specifico>"
+				comp.Name = "OQS - " + getOQSAlgorithmName(x509CertificateWithMetadata)
+				return signatureAlgorithmResult{
+					signature: &comp,
+					hash:      nil,
+					pke:       nil,
+				}, nil
+			}
+		}
 		return signatureAlgorithmResult{
 			signature: nil,
 			hash:      nil,
